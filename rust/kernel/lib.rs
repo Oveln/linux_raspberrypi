@@ -50,6 +50,7 @@ pub mod ioctl;
 pub mod kunit;
 pub mod of;
 pub mod iov_iter;
+pub mod miscdev;
 pub mod mm;
 pub mod pages;
 pub mod prelude;
