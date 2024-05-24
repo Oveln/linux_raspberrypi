@@ -57,4 +57,9 @@ config SAMPLE_RUST_HOSTPROGS
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_MISCDEV
+	tristate "MiscDev"
+	help
+	  This is MiscDev by Rust
+
 endif # SAMPLES_RUST
