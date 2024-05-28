@@ -1,0 +1,12 @@
+[package]
+name = "cargo_driver"
+version = "0.1.0"
+edition = "2021"
+authors = ["Guoweikang <guoweikang.kernel@gmail.com>"]
+description = "Used to collect driver dependencies"
+license = "GPL-3.0-or-later OR Apache-2.0"
+homepage = ""
+
+[dependencies]
+gpio_rpbled_linux_adapt  = { path = "../../drivers/gpio/exercise-3-gpio/gpio-rpbled-adapter"}
+
