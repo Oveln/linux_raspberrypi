@@ -26,6 +26,7 @@
 #include <linux/interrupt.h>
 #include <linux/timekeeping.h>
 #include <linux/completion.h>
+#include <linux/miscdevice.h>
 
 /* `bindgen` gets confused at certain things. */
 const size_t BINDINGS_ARCH_SLAB_MINALIGN = ARCH_SLAB_MINALIGN;

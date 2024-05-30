@@ -50,7 +50,6 @@ pub mod ioctl;
 pub mod kunit;
 pub mod of;
 pub mod iov_iter;
-pub mod miscdev;
 pub mod mm;
 pub mod pages;
 pub mod prelude;
@@ -64,6 +63,8 @@ pub mod task;
 pub mod types;
 pub mod user_ptr;
 pub mod completion;
+pub mod timekeeping;
+pub mod miscdev;
 pub mod irq;
 
 #[doc(hidden)]

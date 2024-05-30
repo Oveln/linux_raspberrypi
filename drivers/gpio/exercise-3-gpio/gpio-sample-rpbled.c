@@ -6,10 +6,12 @@
 #include <linux/cdev.h>
 #include <asm/io.h>
 
-#define BCM2837_GPIO_BASE             0xFE200000
+// #define BCM2837_GPIO_BASE             0x3F200000  // Raspberry Pi 3B+
+#define BCM2837_GPIO_BASE             0xFE200000  // Raspberry Pi 4B
 #define BCM2837_GPIO_FSEL0_OFFSET     0x0   // GPIO功能选择寄存器0
 #define BCM2837_GPIO_SET0_OFFSET      0x1C  // GPIO置位寄存器0
 #define BCM2837_GPIO_CLR0_OFFSET      0x28  // GPIO清零寄存器0
+#define BCM2837_GPIO_GPLEV0_OFFSET    0x34  // GPIO读取电平值寄存器0
 
 #define LED_ON  '1'
 #define LED_OFF '0'
@@ -34,6 +36,8 @@ int rgbled_open(struct inode *inode, struct file *filp)
 ssize_t rgbled_read(struct file* filp, char __user* buf, size_t len, loff_t* off)
 {
 	printk(KERN_INFO "led_read start\n");
+  int val = ioread32(gpio_base + BCM2837_GPIO_GPLEV0_OFFSET);
+  printk(KERN_INFO "led_read start 0x%x\n", val);
   return 0;
 }
 
@@ -49,9 +53,11 @@ ssize_t rgbled_write(struct file* filp, const char __user* buf, size_t len, loff
   printk(KERN_ERR"led_write led_num = %c,len = %zu\n",led_value, len);
   if(led_value == LED_ON) {
     // GPIO bit1 输出1
+    printk("set 1 \n");
     iowrite32(1 << 2, gpio_base + BCM2837_GPIO_SET0_OFFSET);
   } else if (led_value == LED_OFF){
     // GPIO bit1 输出0
+    printk("set 0 \n");
     iowrite32(1 << 2, gpio_base + BCM2837_GPIO_CLR0_OFFSET);
   } else {
     return -EINVAL;
@@ -60,11 +66,18 @@ ssize_t rgbled_write(struct file* filp, const char __user* buf, size_t len, loff
   return len;
 }
 
+int rgbled_release (struct inode *inode, struct file *filp)
+{
+    printk(KERN_INFO "led_release");
+    return 0;
+}
+
 static struct file_operations fops = {
   .owner = THIS_MODULE,
   .open = rgbled_open,
   .read = rgbled_read,
   .write = rgbled_write,
+  .release = rgbled_release,
 };
 
 static dev_t devno = 0;   // 设备编号
