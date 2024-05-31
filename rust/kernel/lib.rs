@@ -45,6 +45,10 @@ pub mod file;
 pub mod fs;
 pub mod init;
 pub mod io_buffer;
+pub mod gpio;
+pub mod fwnode;
+#[cfg(CONFIG_IOMMU_IO_PGTABLE)]
+pub mod io_pgtable;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;

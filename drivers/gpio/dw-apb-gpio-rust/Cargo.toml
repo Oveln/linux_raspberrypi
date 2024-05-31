@@ -1,0 +1,22 @@
+# Licensed under the Apache License, Version 2.0 .
+# SPDX-License-Identifier: Apache-2.0 
+
+[package]
+name = "dw_apb_gpio"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+linux=["osl/linux"]
+arceos=["osl/arceos"]
+default=["linux"]
+
+[dependencies]
+tock-registers = "0.8.0"
+# release use repo
+osl = {path = "../../../rust/osl"}
+
+[target.'cfg(target_os = "linux")'.dependencies]
+#Linux no need depend osl on cargo, it would be through `extern osl` import  

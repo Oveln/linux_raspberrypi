@@ -9,4 +9,4 @@ homepage = ""
 
 [dependencies]
 gpio_rpbled_linux_adapt  = { path = "../../drivers/gpio/exercise-3-gpio/gpio-rpbled-adapter"}
-
+gpio_dw_linux_adapt = { path = "../../drivers/gpio/gpio-dw-linux-adapter" }
