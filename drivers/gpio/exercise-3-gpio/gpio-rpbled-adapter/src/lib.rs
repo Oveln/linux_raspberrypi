@@ -10,8 +10,10 @@ use kernel::{
     prelude::*,
     sync::{Arc, ArcBorrow, Mutex},
     error::code,
+    io::IoReMapBox,
 };
 use led_pure_driver::Led;
+use led_pure_driver::registers::Registers;
 
 module! {
     type: RustLed,
@@ -24,14 +26,16 @@ module! {
 #[pin_data]
 struct LedData {
     #[pin]
-    led: Mutex<Led>,
+    led: Mutex<Led<IoReMapBox<Registers>>>,
 }
 
 impl LedData {
     fn try_new() -> Result<Arc<Self>> {
+        let gpio_base = 0x3f200000;
+        let gpios: IoReMapBox<Registers> = kernel::io::IoReMapBox::new(0x3f200000);
         pr_info!("Led device created\n");
         Ok(Arc::pin_init(pin_init!(Self {
-            led <- new_mutex!(Led::new())
+            led <- new_mutex!(Led::new(gpios))
         }))?)
     }
 }
