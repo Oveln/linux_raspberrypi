@@ -47,6 +47,7 @@ pub mod init;
 pub mod io_buffer;
 pub mod gpio;
 pub mod fwnode;
+pub mod io;
 #[cfg(CONFIG_IOMMU_IO_PGTABLE)]
 pub mod io_pgtable;
 pub mod ioctl;
