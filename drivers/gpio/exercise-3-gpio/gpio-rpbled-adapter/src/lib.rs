@@ -31,8 +31,8 @@ struct LedData {
 
 impl LedData {
     fn try_new() -> Result<Arc<Self>> {
-        let gpio_base = 0x3f200000;
-        let gpios: IoReMapBox<Registers> = kernel::io::IoReMapBox::new(0x3f200000);
+        let gpio_base = 0xfe200000;
+        let gpios: IoReMapBox<Registers> = kernel::io::IoReMapBox::new(gpio_base);
         pr_info!("Led device created\n");
         Ok(Arc::pin_init(pin_init!(Self {
             led <- new_mutex!(Led::new(gpios))
