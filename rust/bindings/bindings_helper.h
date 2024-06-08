@@ -28,7 +28,7 @@
 #include <linux/completion.h>
 #include <linux/miscdevice.h>
 #include <linux/gpio/driver.h>
-#include <linux/io.h>
+#include <linux/amba/bus.h>
 
 /* `bindgen` gets confused at certain things. */
 const size_t BINDINGS_ARCH_SLAB_MINALIGN = ARCH_SLAB_MINALIGN;

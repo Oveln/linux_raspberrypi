@@ -48,6 +48,9 @@ pub mod io_buffer;
 pub mod gpio;
 pub mod fwnode;
 pub mod io;
+pub mod io_mem;
+#[cfg(CONFIG_ARM_AMBA)]
+pub mod amba;
 #[cfg(CONFIG_IOMMU_IO_PGTABLE)]
 pub mod io_pgtable;
 pub mod ioctl;
