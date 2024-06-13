@@ -406,6 +406,49 @@ macro_rules! define_id_array {
     };
 }
 
+/// Defines a new constant [`IdTable`] with a concise syntax.
+///
+/// It is meant to be used by buses and subsystems to create a similar macro with their device id
+/// type already specified, i.e., with fewer parameters to the end user.
+///
+/// # Examples
+///
+// TODO: Exported but not usable by kernel modules (requires `const_trait_impl`).
+/// ```ignore
+/// #![feature(const_trait_impl)]
+/// # use kernel::{define_id_table, driver::RawDeviceId};
+///
+/// #[derive(Copy, Clone)]
+/// struct Id(u32);
+///
+/// // SAFETY: `ZERO` is all zeroes and `to_rawid` stores `offset` as the second element of the raw
+/// // device id pair.
+/// unsafe impl const RawDeviceId for Id {
+///     type RawType = (u64, isize);
+///     const ZERO: Self::RawType = (0, 0);
+///     fn to_rawid(&self, offset: isize) -> Self::RawType {
+///         (self.0 as u64 + 1, offset)
+///     }
+/// }
+///
+/// define_id_table!(T1, Id, &'static [u8], [(Id(10), None)]);
+/// define_id_table!(T2, Id, &'static [u8], [(Id(10), Some(b"id1")), ]);
+/// define_id_table!(T3, Id, &'static [u8], [(Id(10), Some(b"id1")), (Id(20), Some(b"id2"))]);
+/// define_id_table!(T4, Id, &'static [u8], [(Id(10), Some(b"id1")), (Id(20), Some(b"id2")), ]);
+/// define_id_table!(T5, Id, &'static [u8], [(Id(10), None), (Id(20), Some(b"id2")), ]);
+/// define_id_table!(T6, Id, &'static [u8], [(Id(10), Some(b"id1")), (Id(20), None), ]);
+/// define_id_table!(T7, Id, &'static [u8], [(Id(10), None), (Id(20), None), ]);
+/// ```
+#[macro_export]
+macro_rules! define_id_table {
+    ($table_name:ident, $id_type:ty, $data_type:ty, [ $($t:tt)* ]) => {
+        const $table_name: Option<$crate::driver::IdTable<'static, $id_type, $data_type>> = {
+            $crate::define_id_array!(ARRAY, $id_type, $data_type, [ $($t)* ]);
+            Some(ARRAY.as_table())
+        };
+    };
+}
+
 /// Declares an [`IdArray`] as an [`IdTable`] for a bus driver with a concise syntax.
 ///
 /// It is meant to be used by buses and subsystems to create a similar macro with their device id
