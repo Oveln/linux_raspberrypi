@@ -75,6 +75,9 @@ pub mod timekeeping;
 pub mod miscdev;
 pub mod irq;
 
+pub mod serial_core;
+pub mod console;
+
 #[doc(hidden)]
 pub use bindings;
 pub use macros;
