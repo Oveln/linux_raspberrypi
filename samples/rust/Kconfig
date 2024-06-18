@@ -62,4 +62,9 @@ config SAMPLE_RUST_MISCDEV
 	help
 	  This is MiscDev by Rust
 
+config SAMPLE_UART
+	tristate "Uart Serial"
+	help
+	  This is Uart Serial Driver by Rust
+
 endif # SAMPLES_RUST

@@ -4,7 +4,8 @@ pub mod uart_port {
     use kernel::error::{self, Result};
 
     use crate::{container_of, types::Opaque};
-    use bindings::{serial_struct, uart_ops, uart_port};
+    use bindings::{uart_ops, uart_port};
+    pub use kernel::bindings::{ktermios, serial_struct};
 
     pub unsafe trait RawUartPort {
         fn raw_uart_port(&self) -> *mut uart_port;
@@ -24,7 +25,7 @@ pub mod uart_port {
             unsafe { &mut *ptr.cast() }
         }
 
-        pub fn new<T: UartOps>(ops: &T) -> Self {
+        pub fn new<T: UartOps>() -> Self {
             let mut uart_port = bindings::uart_port::default();
             uart_port.ops = unsafe { OperationsVtable::<T>::build() };
             Self(Opaque::new(uart_port))
@@ -83,7 +84,7 @@ pub mod uart_port {
         fn release_port(uart_port: &mut UartPort);
         fn request_port(uart_port: &mut UartPort) -> i32;
         fn config_port(uart_port: &mut UartPort, arg2: i32);
-        fn verify_port(uart_port: &mut UartPort, arg2: *mut serial_struct) -> i32;
+        fn verify_port(uart_port: &mut UartPort, arg2: *mut bindings::serial_struct) -> i32;
         fn ioctl(uart_port: &mut UartPort, arg2: u32, arg3: u64) -> i32;
 
         fn poll_init(uart_port: &mut UartPort) -> i32;
@@ -287,10 +288,14 @@ pub mod uart_driver {
     use crate::prelude::EINVAL;
     use crate::serial_core::uart_port::{self, RawUartPort};
     use crate::str::CString;
+    use crate::types::Opaque;
     use alloc::boxed::Box;
     use core::fmt;
     use core::pin::Pin;
     use kernel::error::Result;
+
+    #[repr(transparent)]
+    struct UartDriver(pub(crate) Opaque<bindings::uart_driver>);
 
     pub struct Options {
         minor: Option<i32>,
@@ -420,9 +425,10 @@ pub mod uart_driver {
             }
         }
 
-        pub fn add_port(self: Pin<&mut Self>, port: &uart_port::UartPort) -> Result {
+        pub fn add_port(self: Pin<&mut Self>, port: Pin<&'static uart_port::UartPort>) -> Result {
             unsafe {
                 let this = self.get_unchecked_mut();
+                let port = port.get_ref();
                 to_result(bindings::uart_add_one_port(
                     &this.uart_driver as *const _ as *mut bindings::uart_driver,
                     port as *const _ as *mut bindings::uart_port,
@@ -430,9 +436,10 @@ pub mod uart_driver {
             }
         }
 
-        pub fn remove_port(self: Pin<&mut Self>, port: &uart_port::UartPort) {
+        pub fn remove_port(self: Pin<&mut Self>, port: Pin<&'static uart_port::UartPort>) {
             unsafe {
                 let this = self.get_unchecked_mut();
+                let port = port.get_ref();
                 bindings::uart_remove_one_port(
                     &this.uart_driver as *const _ as *mut bindings::uart_driver,
                     port as *const _ as *mut bindings::uart_port,
