@@ -15,7 +15,8 @@ always-$(CONFIG_RUST) += libmacros.so
 no-clean-files += libmacros.so
 
 always-$(CONFIG_RUST) += bindings/bindings_generated.rs bindings/bindings_helpers_generated.rs
-obj-$(CONFIG_RUST) += alloc.o bindings.o kernel.o cargo_driver.o
+obj-$(CONFIG_RUST) += alloc.o bindings.o kernel.o
+# obj-$(CONFIG_RUST) += alloc.o bindings.o kernel.o cargo_driver.o
 always-$(CONFIG_RUST) += exports_alloc_generated.h exports_bindings_generated.h \
     exports_kernel_generated.h
 
@@ -468,7 +469,7 @@ $(obj)/kernel.o: $(src)/kernel/lib.rs $(obj)/alloc.o $(obj)/build_error.o \
     $(obj)/libmacros.so $(obj)/bindings.o $(obj)/uapi.o FORCE
 	$(call if_changed_dep,rustc_library)
 
-obj-$(CONFIG_RUST) += cargo_driver.o
+# obj-$(CONFIG_RUST) += cargo_driver.o
 
 # When adding a cargo project, you must add the binaries
 # that need to be excluded here. 
