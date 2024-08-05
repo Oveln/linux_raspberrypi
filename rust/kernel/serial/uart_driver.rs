@@ -9,7 +9,11 @@ use super::uart_console::Console;
 use core::mem::MaybeUninit;
 
 use crate::{
-    bindings, error::{to_result, Result}, pr_info, str::CStr, ThisModule
+    bindings,
+    error::{to_result, Result},
+    pr_info,
+    str::CStr,
+    ThisModule,
 };
 
 /// Wraps the kernel's `struct uart_driver`.
@@ -22,10 +26,16 @@ pub struct UartDriver(bindings::uart_driver);
 
 impl UartDriver {
     /// Create a new [`UartDriver`]
-    pub const fn new(owner: &'static ThisModule, driver_name: &'static CStr, dev_name: &'static CStr, reg: &Console ) -> Self{
+    pub const fn new(
+        owner: &'static ThisModule,
+        driver_name: &'static CStr,
+        dev_name: &'static CStr,
+        reg: &Console,
+    ) -> Self {
         // SAFETY: `console` is a C structure holding data that has been initialized with 0s,
         // hence it is safe to use as-is.
-        let mut uart_driver = unsafe { MaybeUninit::<bindings::uart_driver>::zeroed().assume_init() };
+        let mut uart_driver =
+            unsafe { MaybeUninit::<bindings::uart_driver>::zeroed().assume_init() };
         uart_driver.owner = owner.as_ptr();
         uart_driver.driver_name = driver_name.as_char_ptr();
         uart_driver.dev_name = dev_name.as_char_ptr();
@@ -36,12 +46,7 @@ impl UartDriver {
     }
 
     /// Setup the console other config
-    pub const fn with_config(
-        mut self, 
-        major:i32, 
-        minor: i32, 
-        nr:i32
-    ) -> Self {
+    pub const fn with_config(mut self, major: i32, minor: i32, nr: i32) -> Self {
         self.0.major = major;
         self.0.minor = minor;
         self.0.nr = nr;
@@ -62,20 +67,24 @@ impl UartDriver {
     /// Returns a raw pointer to the inner C struct.
     #[inline]
     pub const fn as_ptr(&self) -> *mut bindings::uart_driver {
-        &self.0 as *const _ as *mut _ 
+        &self.0 as *const _ as *mut _
     }
 
     /// Use `uart_unregister_driver` to registers a driver with the uart core layer.
     ///
-    /// Register a uart driver with the core driver. We in turn register with thetty layer, 
+    /// Register a uart driver with the core driver. We in turn register with thetty layer,
     /// and initialise the core driver per-port state.
     pub fn register(&self) -> Result {
         unsafe {
             to_result(bindings::uart_register_driver(self.as_ptr()))?;
+            pr_info!("Ok?");
             Ok(())
         }
     }
 
+    pub fn is_registered(&self) -> bool {
+        !self.0.state.is_null()
+    }
 }
 
 impl Drop for UartDriver {
@@ -108,4 +117,3 @@ impl From<*mut bindings::uart_driver> for UartDriverRef {
         Self(value)
     }
 }
-
