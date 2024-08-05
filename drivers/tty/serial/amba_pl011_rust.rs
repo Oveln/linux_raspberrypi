@@ -6,7 +6,9 @@
 
 use core::ops::DerefMut;
 use kernel::{
-    amba, bindings, c_str,
+    amba,
+    arch::processor::cpu_relax,
+    bindings, c_str,
     clk::Clk,
     device,
     error::{code::*, Result},
@@ -25,8 +27,8 @@ use kernel::{
 };
 
 const UART_SIZE: usize = 0x200;
-const UPIO_MEM: u32 = 2;
-const UPIO_MEM32: u32 = 3;
+const UPIO_MEM: u8 = 2;
+const UPIO_MEM32: u8 = 3;
 
 pub const UPF_BOOT_AUTOCONF: u64 = 1_u64 << 28;
 
@@ -36,9 +38,57 @@ const AMBA_MINOR: i32 = 64;
 const DEV_NAME: &CStr = c_str!("ttyAMA");
 const DRIVER_NAME: &CStr = c_str!("ttyAMA");
 
-/// A static's struct with all port Data
-// pub(crate) static mut PORTS: [Option<&UartPort>; UART_NR] = [None; UART_NR];
+#[derive(Debug)]
+enum Regs {
+    RegDr,
+    RegStDmawm,
+    RegStTimeout,
+    RegFr,
+    RegLcrhRx,
+    RegLcrhTx,
+    RegIbrd,
+    RegFbrd,
+    RegCr,
+    RegIfls,
+    RegImsc,
+    RegRis,
+    RegMis,
+    RegIcr,
+    RegDmacr,
+    RegStXfcr,
+    RegStXon1,
+    RegStXon2,
+    RegStXoff1,
+    RegStXoff2,
+    RegStItcr,
+    RegStItip,
+    RegStAbcr,
+    RegStAbimsc,
 
+    /* The size of the array - must be last */
+    RegArraySize,
+}
+
+static PL0111_STD_OFFSETS: [u32; Regs::RegArraySize as usize] = {
+    use Regs::*;
+    let mut arr = [0; Regs::RegArraySize as usize];
+    arr[RegDr as usize] = UART01X_DR;
+    arr[RegFr as usize] = UART01X_FR;
+    arr[RegLcrhRx as usize] = ST_UART011_LCRH_RX;
+    arr[RegLcrhTx as usize] = ST_UART011_LCRH_TX;
+    arr[RegIbrd as usize] = UART011_IBRD;
+    arr[RegFbrd as usize] = UART011_FBRD;
+    arr[RegCr as usize] = UART011_CR;
+    arr[RegIfls as usize] = UART011_IFLS;
+    arr[RegImsc as usize] = UART011_IMSC;
+    arr[RegRis as usize] = UART011_RIS;
+    arr[RegMis as usize] = UART011_MIS;
+    arr[RegIcr as usize] = UART011_ICR;
+    arr[RegDmacr as usize] = UART011_DMACR;
+    arr
+};
+
+/// A static's struct with all port Data
 struct Ports(Vec<Option<Arc<PL011DeviceData>>>);
 
 impl Ports {
@@ -100,6 +150,45 @@ pub(crate) static UART_DRIVER: UartDriver =
         UART_NR as _,
     );
 
+struct PL011UartPort<'a>(pub(crate) &'a mut UartPort);
+impl PL011UartPort<'_> {
+    fn write(&self, val: u32, reg: Regs) {
+        pr_info!("write {} to {:?}", val, reg);
+        let data = self.0.get_data::<PL011DeviceData>();
+        let iomem = &data.resources().unwrap().base;
+        let offset = PL0111_STD_OFFSETS[reg as usize] as usize;
+        if self.0.iotype() == UPIO_MEM32 {
+            iomem.try_writel_relaxed(val, offset);
+        } else {
+            iomem.try_writew_relaxed(val as u16, offset);
+        }
+    }
+    fn read(&self, reg: Regs) -> u32 {
+        let data = self.0.get_data::<PL011DeviceData>();
+        let iomem = &data.resources().unwrap().base;
+        let offset = PL0111_STD_OFFSETS[reg as usize] as usize;
+        if self.0.iotype() == UPIO_MEM32 {
+            iomem.try_readl_relaxed(offset).unwrap()
+        } else {
+            iomem.try_readw_relaxed(offset).unwrap().into()
+        }
+    }
+    fn console_putchar(&self, ch: u8) {
+        while (self.read(Regs::RegFr) & UART01X_FR_TXFF) != 0 {
+            cpu_relax();
+        }
+        self.write(ch.into(), Regs::RegDr);
+    }
+    fn console_write(&self, s: *const u8, count: u32) {
+        for i in 0..count {
+            let ch = unsafe { *s.offset(i.try_into().unwrap()) };
+            if ch == '\n' as u8 {
+                self.console_putchar(ch);
+            }
+        }
+    }
+}
+
 /// This is Struct of pl011_console
 struct Pl011Console;
 /// Implement supported `Pl011Console`'s operations here.
@@ -107,8 +196,45 @@ struct Pl011Console;
 impl ConsoleOps for Pl011Console {
     type Data = UartDriver;
 
-    fn console_write(co: &Console, _s: *const i8, _count: u32) {
-        pr_info!("console_write ok");
+    fn console_write(co: &Console, s: *const i8, count: u32) {
+        pr_info!("console_write\n");
+        let data = unsafe { PORTS.get_port(co.index() as usize).unwrap() };
+        let mut registrations = data.registrations().ok_or(ENXIO).unwrap();
+        let mut port: PL011UartPort<'_> = PL011UartPort(registrations.mut_uart_port());
+        let mut old_cr: u32 = 0;
+        let mut new_cr: u32;
+        let mut flags: u64;
+        let mut locked = true;
+
+        let clk = port.0.get_dev().unwrap().clk_get().unwrap();
+        let enabled_clk = clk.prepare_enable().unwrap();
+
+        // local_irq_save(flags);
+        if port.0.get_sysrq() != 0 {
+            locked = true;
+        } else {
+            port.0.lock();
+        }
+
+        if !data.vendor.always_enabled {
+            old_cr = port.read(Regs::RegCr);
+            new_cr = old_cr & !UART011_CR_CTSEN;
+            new_cr = new_cr | UART01X_CR_UARTEN | UART011_CR_TXE;
+            port.write(new_cr, Regs::RegCr);
+        }
+
+        port.console_write(s as *const u8, count);
+
+        while ((port.read(Regs::RegFr) ^ data.vendor.inv_fr) & data.vendor.fr_busy) != 0 {
+            cpu_relax();
+        }
+        if !data.vendor.always_enabled {
+            port.write(old_cr, Regs::RegCr);
+        }
+        if locked {
+            port.0.unlock();
+        }
+        // local_irq_restore(flags);
     }
 
     fn console_read(_co: &Console, _s: *mut i8, _count: u32) -> Result<i32> {
@@ -126,7 +252,6 @@ impl ConsoleOps for Pl011Console {
         todo!()
     }
 }
-
 pub(crate) static VENDOR_DATA: VendorData = VendorData {
     ifls: UART011_IFLS_RX4_8 | UART011_IFLS_TX4_8,
     fr_busy: UART01X_FR_BUSY,
@@ -144,7 +269,6 @@ pub(crate) static VENDOR_DATA: VendorData = VendorData {
 
 #[derive(Copy, Clone)]
 struct PL011Data {
-    // reg_offset: u16,
     im: u32,
     old_status: u32,
     fifosize: u32,

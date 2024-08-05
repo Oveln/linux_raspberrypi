@@ -142,6 +142,10 @@ impl Console {
     pub const fn as_ptr(&self) -> *mut bindings::console {
         &self.0 as *const _ as _
     }
+
+    pub fn index(&self) -> i16 {
+        self.0.index
+    }
 }
 
 unsafe impl Send for Console {}

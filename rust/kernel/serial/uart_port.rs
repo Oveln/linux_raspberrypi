@@ -168,6 +168,35 @@ impl UartPort {
     pub fn get_portnr(&self) -> u32 {
         self.0.line
     }
+
+    pub fn get_dev(&self) -> Option<device::Device> {
+        if self.0.dev.is_null() {
+            None
+        } else {
+            Some(unsafe { device::Device { ptr: self.0.dev } })
+        }
+    }
+
+    pub fn get_sysrq(&self) -> u64 {
+        self.0.sysrq
+    }
+
+    pub fn lock(&mut self) {
+        unsafe { bindings::spin_lock(&mut self.0.lock) };
+    }
+
+    pub fn unlock(&mut self) {
+        unsafe { bindings::spin_unlock(&mut self.0.lock) };
+    }
+
+    pub fn iotype(&self) -> u8 {
+        self.0.iotype
+    }
+
+    pub fn get_data<T>(&self) -> &mut T {
+        let ptr = self.0.private_data as *mut T;
+        unsafe { &mut *ptr }
+    }
 }
 
 /// A registration of a reset controller.
@@ -230,6 +259,9 @@ impl<T: UartPortOps> PortRegistration<T> {
     }
     pub fn ref_uart_port(&self) -> &UartPort {
         &self.uart_port
+    }
+    pub fn mut_uart_port(&mut self) -> &mut UartPort {
+        &mut self.uart_port
     }
 }
 
