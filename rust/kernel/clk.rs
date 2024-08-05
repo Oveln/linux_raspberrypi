@@ -5,8 +5,8 @@
 //! C header: [`include/linux/clk.h`](../../../../include/linux/clk.h)
 
 use crate::{
-    bindings, 
-    error::{ Result, to_result},
+    bindings,
+    error::{to_result, Result},
     types::Opaque,
 };
 use core::mem::ManuallyDrop;
@@ -16,46 +16,45 @@ use core::mem::ManuallyDrop;
 /// # Invariants
 ///
 /// The pointer is valid.
-pub struct Clk(Opaque<bindings::clk>);
+pub struct Clk(*mut bindings::clk);
 
 impl Clk {
     /// Create Clk from raw ptr
-    pub fn from_raw<'a>(ptr: *mut bindings::clk) -> &'a mut Self {
-        let ptr = ptr.cast::<Self>();
-        unsafe {&mut *ptr}
+    pub fn from_raw<'a>(ptr: *mut bindings::clk) -> Self {
+        Self(ptr)
     }
 
     /// Returns a raw pointer to the inner C struct.
     #[inline]
     pub fn as_ptr(&self) -> *mut bindings::clk {
-        self.0.get()
+        self.0
     }
-    
+
     /// Get clk rate
     pub fn get_rate(&self) -> u64 {
         // SAFETY: call ffi and ptr is valid
-        unsafe{bindings::clk_get_rate(self.0.get())}
+        unsafe { bindings::clk_get_rate(self.0) }
     }
 
     /// clk enable
-    pub fn prepare_enable(&self) -> Result {
+    pub fn prepare_enable(self) -> Result<EnabledClk> {
         // SAFETY: call ffi and ptr is valid
-        unsafe{
-            to_result(bindings::clk_prepare(self.0.get()))?;
-            let ret =  to_result(bindings::clk_enable(self.0.get()));
-            if ret.is_err() {
-                bindings::clk_unprepare(self.0.get());
-                return ret;
+        unsafe {
+            to_result(bindings::clk_prepare(self.0))?;
+            let ret = to_result(bindings::clk_enable(self.0));
+            if let Err(e) = ret {
+                bindings::clk_unprepare(self.0);
+                return Err(e);
             }
         }
-        Ok(())
+        Ok(EnabledClk(self))
     }
 }
 
 impl Drop for Clk {
     fn drop(&mut self) {
         // SAFETY: The pointer is valid by the type invariant.
-        unsafe { bindings::clk_put(self.0.get()) };
+        unsafe { bindings::clk_put(self.0) };
     }
 }
 
