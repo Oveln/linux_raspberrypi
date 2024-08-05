@@ -164,6 +164,10 @@ impl UartPort {
         self.0.fifosize = fifosize;
         self
     }
+
+    pub fn get_portnr(&self) -> u32 {
+        self.0.line
+    }
 }
 
 /// A registration of a reset controller.
@@ -223,6 +227,9 @@ impl<T: UartPortOps> PortRegistration<T> {
         this.dev = Some(device::Device::from_dev(dev));
         this.is_registered = true;
         Ok(())
+    }
+    pub fn ref_uart_port(&self) -> &UartPort {
+        &self.uart_port
     }
 }
 

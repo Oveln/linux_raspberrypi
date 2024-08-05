@@ -37,7 +37,44 @@ const DEV_NAME: &CStr = c_str!("ttyAMA");
 const DRIVER_NAME: &CStr = c_str!("ttyAMA");
 
 /// A static's struct with all port Data
-pub(crate) static mut PORTS: [Option<&UartPort>; UART_NR] = [None; UART_NR];
+// pub(crate) static mut PORTS: [Option<&UartPort>; UART_NR] = [None; UART_NR];
+
+struct Ports(Vec<Option<Arc<PL011DeviceData>>>);
+
+impl Ports {
+    fn find_free_port(&self) -> Option<usize> {
+        if self.0.len() >= UART_NR {
+            return None;
+        }
+        for i in 0..self.0.len() {
+            if self.0[i].is_none() {
+                return Some(i);
+            }
+        }
+        return Some(self.0.len());
+    }
+
+    fn get_port(&self, index: usize) -> Option<Arc<PL011DeviceData>> {
+        self.0.get(index).and_then(|port| port.clone())
+    }
+
+    fn set_port(&mut self, index: usize, port: Arc<PL011DeviceData>) -> Result<()> {
+        if index >= self.0.len() {
+            self.0.try_resize(index + 1, None)?;
+        }
+        self.0[index] = Some(port);
+        Ok(())
+    }
+
+    fn free_port(&mut self, index: usize) {
+        if index >= self.0.len() {
+            return;
+        }
+        self.0[index] = None;
+    }
+}
+
+pub(crate) static mut PORTS: Ports = Ports(Vec::new());
 
 /// This amba_uart_console static's struct
 static AMBA_CONSOLE: Console = {
@@ -191,7 +228,7 @@ impl amba::Driver for PL011Device {
 
         let dev = device::Device::from_dev(adev);
 
-        let portnr = pl011_find_free_port()?;
+        let portnr = unsafe { PORTS.find_free_port().ok_or(ENXIO)? };
         dev_info!(adev, "portnr is {}\n", portnr);
         let clk = dev.clk_get().unwrap(); // 获得clk
         let fifosize = if adev.revision_get().unwrap() < 3 {
@@ -247,10 +284,22 @@ impl amba::Driver for PL011Device {
         let mut registration = arc_portdata.registrations().ok_or(ENXIO)?;
         let registration_mut = unsafe { Pin::new_unchecked(registration.deref_mut()) };
         registration_mut.register(adev, &UART_DRIVER, portnr, arc_portdata.clone());
-        // unsafe { PORTS[portnr] = Some()) }
+        unsafe { PORTS.set_port(portnr, arc_portdata.clone()) };
         drop(registration);
         dbg!("********* PL011 registered *********\n");
         Ok(arc_portdata)
+    }
+
+    fn remove(data: &Self::Data) {
+        dbg!("********* PL011 remove *********\n");
+        let portnr: usize = data
+            .registrations()
+            .ok_or(ENXIO)
+            .unwrap()
+            .ref_uart_port()
+            .get_portnr() as usize;
+        unsafe { PORTS.free_port(portnr) }
+        dbg!("********* PL011 remove end *********\n");
     }
 }
 
@@ -262,22 +311,12 @@ module_amba_driver! {
     initcall: "arch",
 }
 
-/// Find available driver ports sequentially.
-fn pl011_find_free_port() -> Result<usize> {
-    for (index, port) in unsafe { PORTS.iter().enumerate() } {
-        if let None = port {
-            return Ok(index);
-        }
-    }
-    return Err(EBUSY);
-}
-
-/// pl011 register write
-fn pl011_write(val: u32, membase: *mut u8, reg: usize, iotype: u8) {
-    let addr = membase.wrapping_add(reg);
-    if iotype == UPIO_MEM32 as u8 {
-        unsafe { bindings::writel_relaxed(val as _, addr as _) };
-    } else {
-        unsafe { bindings::writew_relaxed(val as _, addr as _) };
-    }
-}
+// /// pl011 register write
+// fn pl011_write(val: u32, membase: *mut u8, reg: usize, iotype: u8) {
+//     let addr = membase.wrapping_add(reg);
+//     if iotype == UPIO_MEM32 as u8 {
+//         unsafe { bindings::writel_relaxed(val as _, addr as _) };
+//     } else {
+//         unsafe { bindings::writew_relaxed(val as _, addr as _) };
+//     }
+// }
