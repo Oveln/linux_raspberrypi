@@ -8,14 +8,15 @@
 
 use crate::{
     bindings,
-    error::{Result, from_result},
+    error::{from_result, Result},
     types::ForeignOwnable,
 };
 
 use core::mem::MaybeUninit;
 
-
 use macros::vtable;
+
+use super::uart_driver::UartDriver;
 
 /// General Console Flags associated with a [`Console`].
 /// Bitmask for access mode flags.
@@ -37,12 +38,12 @@ pub mod flags {
     /// Indicates that the console driver is backing.
     pub const CON_CONSDEV: u32 = bindings::cons_flags_CON_CONSDEV;
 
-    /// Indicates if a console is allowed to print records. 
+    /// Indicates if a console is allowed to print records.
     pub const CON_ENABLED: u32 = bindings::cons_flags_CON_ENABLED;
 
     /// Marks the console driver as early console driver which
- 	/// is used during boot before the real driver becomes
- 	/// available. 
+    /// is used during boot before the real driver becomes
+    /// available.
     pub const CON_BOOT: u32 = bindings::cons_flags_CON_BOOT;
 
     /// A misnomed historical flag which tells the core code
@@ -50,15 +51,15 @@ pub mod flags {
     /// on a CPU which is marked OFFLINE.
     pub const CON_ANYTIME: u32 = bindings::cons_flags_CON_ANYTIME;
 
-    /// FIndicates a braille device which is exempt from 
+    /// FIndicates a braille device which is exempt from
     /// receiving the printk spam for obvious reasons.
     pub const CON_BRL: u32 = bindings::cons_flags_CON_BRL;
 
-    /// The console supports the extended output format of /dev/kmesg 
+    /// The console supports the extended output format of /dev/kmesg
     /// which requires a larger output buffer.
     pub const CON_EXTENDED: u32 = bindings::cons_flags_CON_EXTENDED;
 
-    /// Indicates if a console is suspended. If true, 
+    /// Indicates if a console is suspended. If true,
     /// the printing callbacks must not be called.
     pub const CON_SUSPENDED: u32 = bindings::cons_flags_CON_SUSPENDED;
 }
@@ -67,7 +68,8 @@ pub mod flags {
 #[vtable]
 pub trait ConsoleOps {
     /// User data that will be accessible to all operations
-    type Data: ForeignOwnable + Send + Sync = ();
+    // type Data: ForeignOwnable + Send + Sync = ();
+    type Data: Send + Sync = ();
 
     /// Write callback to output messages (Optional)
     fn console_write(_co: &Console, _s: *const i8, _count: u32);
@@ -76,12 +78,7 @@ pub trait ConsoleOps {
     fn console_read(_co: &Console, _s: *mut i8, _count: u32) -> Result<i32>;
 
     /// Callback for matching a console (Optional)
-    fn console_match(
-        _co: &Console, 
-        _name: *mut i8 , 
-        _idx: i32, 
-        _options: *mut i8,
-    ) -> Result<i32>;
+    fn console_match(_co: &Console, _name: *mut i8, _idx: i32, _options: *mut i8) -> Result<i32>;
 
     /// The underlying TTY device driver (Optional)
     fn console_device(_co: &Console, _index: *mut i8) -> *mut bindings::tty_driver;
@@ -93,38 +90,38 @@ pub trait ConsoleOps {
 ///
 /// `self.0` has always valid data.
 pub struct Console(bindings::console);
-impl Console { 
+impl Console {
     /// Create a new [`UartDriver`] Console
-    pub const fn new<T: ConsoleOps>(name:[i8; 16usize], reg: *mut bindings::uart_driver ) -> Self{
+    pub const fn new<T: ConsoleOps>(name: [i8; 16usize], reg: &'static T::Data) -> Self {
         // SAFETY: `console` is a C structure holding data that has been initialized with 0s,
         // hence it is safe to use as-is.
         let mut console = unsafe { MaybeUninit::<bindings::console>::zeroed().assume_init() };
-        console.name   = name;
-        console.write  = Some(console_write_callback::<T>);
-        console.read   = Some(console_read_callback::<T>);
+        console.name = name;
+        console.write = Some(console_write_callback::<T>);
+        console.read = Some(console_read_callback::<T>);
         console.match_ = Some(console_match_callback::<T>);
         console.device = Some(console_device_callback::<T>);
-        console.data   = reg as _ ;
+        console.data = reg as *const _ as _;
         Self(console)
     }
 
     /// Setup the console other config
     pub const fn with_config(
-        mut self, 
-        flags: i16, 
-        index:i16, 
-        cflag:i32, 
-        ispeed:u32, 
-        ospeed:u32, 
-        seq: u64, 
-        dropped:u64
+        mut self,
+        flags: i16,
+        index: i16,
+        cflag: i32,
+        ispeed: u32,
+        ospeed: u32,
+        seq: u64,
+        dropped: u64,
     ) -> Self {
         self.0.flags = flags;
         self.0.index = index;
         self.0.cflag = cflag;
         self.0.ispeed = ispeed;
         self.0.ospeed = ospeed;
-        self.0.seq    = seq;
+        self.0.seq = seq;
         self.0.dropped = dropped;
         self
     }
@@ -150,44 +147,44 @@ impl Console {
 unsafe impl Send for Console {}
 unsafe impl Sync for Console {}
 
-unsafe extern "C" fn console_write_callback<T: ConsoleOps> (
+unsafe extern "C" fn console_write_callback<T: ConsoleOps>(
     co: *mut bindings::console,
     s: *const core::ffi::c_char,
     count: core::ffi::c_uint,
-){
-    let co = unsafe { Console::from_raw(co)};
+) {
+    let co = unsafe { Console::from_raw(co) };
     T::console_write(co, s, count);
 }
 
-unsafe extern "C" fn console_read_callback<T: ConsoleOps> (
+unsafe extern "C" fn console_read_callback<T: ConsoleOps>(
     co: *mut bindings::console,
     s: *mut core::ffi::c_char,
     count: core::ffi::c_uint,
-) -> core::ffi::c_int{
-    from_result(||{
+) -> core::ffi::c_int {
+    from_result(|| {
         // SAFETY: The value stored as chip data was returned by `into_foreign` during registration.
-        let co = unsafe { Console::from_raw(co)};
+        let co = unsafe { Console::from_raw(co) };
         T::console_read(co, s, count)
     })
 }
 
-unsafe extern "C" fn console_match_callback<T: ConsoleOps> (
+unsafe extern "C" fn console_match_callback<T: ConsoleOps>(
     co: *mut bindings::console,
     name: *mut core::ffi::c_char,
     idx: core::ffi::c_int,
     options: *mut core::ffi::c_char,
-) -> core::ffi::c_int{
-    from_result(||{
-        let co = unsafe { Console::from_raw(co)};
+) -> core::ffi::c_int {
+    from_result(|| {
+        let co = unsafe { Console::from_raw(co) };
         T::console_match(co, name, idx, options)
     })
 }
 
-unsafe extern "C" fn console_device_callback<T: ConsoleOps> (
+unsafe extern "C" fn console_device_callback<T: ConsoleOps>(
     co: *mut bindings::console,
     index: *mut core::ffi::c_int,
 ) -> *mut bindings::tty_driver {
-    let co = unsafe { Console::from_raw(co)};
+    let co = unsafe { Console::from_raw(co) };
     T::console_device(co, index as *mut i8)
 }
 

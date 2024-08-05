@@ -36,7 +36,7 @@ const AMBA_MINOR: i32 = 64;
 const DEV_NAME: &CStr = c_str!("ttyAMA");
 const DRIVER_NAME: &CStr = c_str!("ttyAMA");
 
-/// A static's struct with all uart_port
+/// A static's struct with all port Data
 pub(crate) static mut PORTS: [Option<&UartPort>; UART_NR] = [None; UART_NR];
 
 /// This amba_uart_console static's struct
@@ -44,7 +44,7 @@ static AMBA_CONSOLE: Console = {
     let name: [i8; 16usize] = [
         't' as _, 't' as _, 'y' as _, 'A' as _, 'M' as _, 'A' as _, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    Console::new::<Pl011Console>(name, UART_DRIVER.as_ptr()).with_config(
+    Console::new::<Pl011Console>(name, &UART_DRIVER).with_config(
         (flags::CON_PRINTBUFFER | flags::CON_ANYTIME) as _,
         -1,
         0,
@@ -68,9 +68,9 @@ struct Pl011Console;
 /// Implement supported `Pl011Console`'s operations here.
 #[vtable]
 impl ConsoleOps for Pl011Console {
-    type Data = ();
+    type Data = UartDriver;
 
-    fn console_write(_co: &Console, _s: *const i8, _count: u32) {
+    fn console_write(co: &Console, _s: *const i8, _count: u32) {
         pr_info!("console_write ok");
     }
 
@@ -244,8 +244,11 @@ impl amba::Driver for PL011Device {
         if !UART_DRIVER.is_registered() {
             UART_DRIVER.register()?;
         }
-        unsafe { Pin::new_unchecked(arc_portdata.registrations().ok_or(ENXIO)?.deref_mut()) }
-            .register(adev, &UART_DRIVER, UART_NR, arc_portdata.clone());
+        let mut registration = arc_portdata.registrations().ok_or(ENXIO)?;
+        let registration_mut = unsafe { Pin::new_unchecked(registration.deref_mut()) };
+        registration_mut.register(adev, &UART_DRIVER, portnr, arc_portdata.clone());
+        // unsafe { PORTS[portnr] = Some()) }
+        drop(registration);
         dbg!("********* PL011 registered *********\n");
         Ok(arc_portdata)
     }
