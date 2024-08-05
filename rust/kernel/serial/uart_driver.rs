@@ -75,11 +75,7 @@ impl UartDriver {
     /// Register a uart driver with the core driver. We in turn register with thetty layer,
     /// and initialise the core driver per-port state.
     pub fn register(&self) -> Result {
-        unsafe {
-            to_result(bindings::uart_register_driver(self.as_ptr()))?;
-            pr_info!("Ok?");
-            Ok(())
-        }
+        unsafe { to_result(bindings::uart_register_driver(self.as_ptr())) }
     }
 
     pub fn is_registered(&self) -> bool {
