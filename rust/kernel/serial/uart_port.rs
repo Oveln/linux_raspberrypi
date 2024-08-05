@@ -7,9 +7,9 @@
 use super::{ktermbits::Ktermios, tty::SerialStruct, uart_driver::UartDriver};
 
 use crate::{
-    bindings, dev_err, device,
+    bindings, c_str, dev_err, device,
     error::{code::*, Result},
-    pr_err, pr_warn,
+    pr_err, pr_info, pr_warn,
     types::ForeignOwnable,
 };
 
@@ -153,6 +153,7 @@ impl UartPort {
         fifosize: u32,
         index: u32,
     ) -> Self {
+        self.0.name = &c_str!("ov_uart") as *const _ as *const i8;
         self.0.membase = membase;
         self.0.mapbase = mapbase;
         self.0.irq = irq;
@@ -178,16 +179,15 @@ impl<T: UartPortOps> PortRegistration<T> {
     /// Creates a new [`ResetRegistration`] but does not register it yet.
     ///
     /// It is allowed to move.
-    pub fn new() -> Self {
+    pub fn new(port: UartPort) -> Self {
         Self {
-            uart_port: UartPort::new(),
+            uart_port: port,
             dev: None,
             is_registered: false,
             _p: PhantomData,
             _pin: PhantomPinned,
         }
     }
-
     /// Registers a port in uart driver of the kernel.
     ///
     /// use `uart_add_one_port` to register this device.
