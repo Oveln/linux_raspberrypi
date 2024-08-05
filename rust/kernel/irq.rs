@@ -9,12 +9,11 @@
 //!
 
 use crate::{
+    bindings,
     error::to_result,
     error::Result,
     str::CString,
-    bindings,
     types::{ForeignOwnable, ScopeGuard},
-
 };
 
 use core::fmt;
@@ -162,7 +161,7 @@ impl<H: Handler> Registration<H> {
 
         // SAFETY: On registration, `into_foreign` was called, so it is safe to borrow from it here
         // because `from_foreign` is called only after the irq is unregistered.
-        let data = unsafe {H::Data::borrow(raw_data) };
+        let data = unsafe { H::Data::borrow(raw_data) };
         H::handle_irq(data) as _
     }
 }
@@ -235,3 +234,10 @@ pub mod flags {
     pub const NO_DEBUG: usize = bindings::IRQF_NO_DEBUG as _;
 }
 
+pub fn local_irq_save() -> u64 {
+    unsafe { bindings::local_irq_save() }
+}
+
+pub fn local_irq_restore(flags: u64) {
+    unsafe { bindings::local_irq_restore(flags) }
+}

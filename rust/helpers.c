@@ -20,6 +20,8 @@
  * Sorted alphabetically.
  */
 
+#include "linux/export.h"
+#include "linux/irqflags.h"
 #include <kunit/test-bug.h>
 #include <linux/bug.h>
 #include <linux/build_bug.h>
@@ -37,6 +39,7 @@
 #include <linux/highmem.h>
 #include <linux/uaccess.h>
 #include <linux/amba/bus.h>
+#include <linux/irqflags.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -401,6 +404,20 @@ void rust_helper_clk_disable_unprepare(struct clk *clk)
 	return clk_disable_unprepare(clk);
 }
 EXPORT_SYMBOL_GPL(rust_helper_clk_disable_unprepare);
+
+unsigned long rust_helper_local_irq_save(void)
+{
+    unsigned long flags;
+    local_irq_save(flags);
+    return flags;
+}
+EXPORT_SYMBOL_GPL(rust_helper_local_irq_save);
+
+void rust_helper_local_irq_restore(unsigned long flags)
+{
+    local_irq_restore(flags);
+}
+EXPORT_SYMBOL_GPL(rust_helper_local_irq_restore);
 
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can
