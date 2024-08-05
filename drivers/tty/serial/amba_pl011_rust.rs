@@ -13,13 +13,14 @@ use kernel::{
     device,
     error::{code::*, Result},
     io_mem::IoMem,
+    irq::{local_irq_restore, local_irq_save},
     module_amba_driver, new_device_data, new_mutex_pinned,
     prelude::*,
     serial::{
         ktermbits::Ktermios,
         pl011_config::*,
         tty::SerialStruct,
-        uart_console::{flags, Console, ConsoleOps},
+        uart_console::{self, flags, Console, ConsoleOps},
         uart_driver::UartDriver,
         uart_port::{PortRegistration, UartPort, UartPortOps},
     },
@@ -38,7 +39,7 @@ const AMBA_MINOR: i32 = 64;
 const DEV_NAME: &CStr = c_str!("ttyAMA");
 const DRIVER_NAME: &CStr = c_str!("ttyAMA");
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Regs {
     RegDr,
     RegStDmawm,
@@ -153,7 +154,7 @@ pub(crate) static UART_DRIVER: UartDriver =
 struct PL011UartPort<'a>(pub(crate) &'a mut UartPort);
 impl PL011UartPort<'_> {
     fn write(&self, val: u32, reg: Regs) {
-        pr_info!("write {} to {:?}", val, reg);
+        dbg!("write {} to {:?}", val, reg.clone());
         let data = self.0.get_data::<PL011DeviceData>();
         let iomem = &data.resources().unwrap().base;
         let offset = PL0111_STD_OFFSETS[reg as usize] as usize;
@@ -197,19 +198,18 @@ impl ConsoleOps for Pl011Console {
     type Data = UartDriver;
 
     fn console_write(co: &Console, s: *const i8, count: u32) {
-        pr_info!("console_write\n");
+        dbg!("console_write\n");
         let data = unsafe { PORTS.get_port(co.index() as usize).unwrap() };
         let mut registrations = data.registrations().ok_or(ENXIO).unwrap();
         let mut port: PL011UartPort<'_> = PL011UartPort(registrations.mut_uart_port());
         let mut old_cr: u32 = 0;
         let mut new_cr: u32;
-        let mut flags: u64;
         let mut locked = true;
 
         let clk = port.0.get_dev().unwrap().clk_get().unwrap();
         let enabled_clk = clk.prepare_enable().unwrap();
 
-        // local_irq_save(flags);
+        let flags = local_irq_save();
         if port.0.get_sysrq() != 0 {
             locked = true;
         } else {
@@ -234,22 +234,17 @@ impl ConsoleOps for Pl011Console {
         if locked {
             port.0.unlock();
         }
-        // local_irq_restore(flags);
+        local_irq_restore(flags);
     }
 
     fn console_read(_co: &Console, _s: *mut i8, _count: u32) -> Result<i32> {
-        pr_info!("console_read ok");
+        dbg!("console_read ok");
         Ok(0)
     }
 
     fn console_match(_co: &Console, _name: *mut i8, _idx: i32, _options: *mut i8) -> Result<i32> {
-        pr_info!("console_match ok");
+        dbg!("console_match ok");
         Ok(0)
-    }
-
-    fn console_device(_co: &Console, _index: *mut i8) -> *mut bindings::tty_driver {
-        pr_info!("console_device ok");
-        todo!()
     }
 }
 pub(crate) static VENDOR_DATA: VendorData = VendorData {
@@ -297,48 +292,93 @@ struct PL011Device;
 impl UartPortOps for PL011Device {
     type Data = Arc<PL011DeviceData>;
     fn tx_empty(_: &UartPort) -> u32 {
+        dbg!("tx_empty\n");
         0
     }
-    fn set_mctrl(_: &UartPort, _: u32) {}
+    fn set_mctrl(_: &UartPort, _: u32) {
+        dbg!("set_mctrl\n");
+    }
     fn get_mctrl(_: &UartPort) -> u32 {
+        dbg!("get_mctrl\n");
         0
     }
-    fn stop_tx(_: &UartPort) {}
-    fn start_tx(_: &UartPort) {}
-    fn throttle(_: &UartPort) {}
-    fn unthrottle(_: &UartPort) {}
-    fn send_xchar(_: &UartPort, _: i8) {}
-    fn stop_rx(_: &UartPort) {}
-    fn start_rx(_: &UartPort) {}
-    fn break_ctl(_: &UartPort, _: i32) {}
+    fn stop_tx(_: &UartPort) {
+        dbg!("stop_tx\n");
+    }
+    fn start_tx(_: &UartPort) {
+        dbg!("start_tx\n");
+    }
+    fn throttle(_: &UartPort) {
+        dbg!("throttle\n");
+    }
+    fn unthrottle(_: &UartPort) {
+        dbg!("unthrottle\n");
+    }
+    fn send_xchar(_: &UartPort, _: i8) {
+        dbg!("send_xchar\n");
+    }
+    fn stop_rx(_: &UartPort) {
+        dbg!("stop_rx\n");
+    }
+    fn start_rx(_: &UartPort) {
+        dbg!("start_rx\n");
+    }
+    fn break_ctl(_: &UartPort, _: i32) {
+        dbg!("break_ctl\n");
+    }
     fn startup(_: &UartPort) -> i32 {
+        dbg!("startup\n");
         0
     }
-    fn shutdown(_: &UartPort) {}
-    fn flush_buffer(_: &UartPort) {}
-    fn set_termios(_: &UartPort, _: &mut Ktermios, _: &Ktermios) {}
-    fn set_ldisc(_: &UartPort, _: &mut Ktermios) {}
-    fn pm(_: &UartPort, _: u32, _: u32) {}
-    fn enable_ms(_: &UartPort) {}
+    fn shutdown(_: &UartPort) {
+        dbg!("shutdown\n");
+    }
+    fn flush_buffer(_: &UartPort) {
+        dbg!("flush_buffer\n");
+    }
+    fn set_termios(_: &UartPort, _: &mut Ktermios, _: &Ktermios) {
+        dbg!("set_termios\n");
+    }
+    fn set_ldisc(_: &UartPort, _: &mut Ktermios) {
+        dbg!("set_ldisc\n");
+    }
+    fn pm(_: &UartPort, _: u32, _: u32) {
+        dbg!("pm\n");
+    }
+    fn enable_ms(_: &UartPort) {
+        dbg!("enable_ms\n");
+    }
     fn port_type(_: &UartPort) -> *const i8 {
-        unimplemented!()
+        dbg!("port_type\n");
+        0 as *const i8
     }
-    fn release_port(_: &UartPort) {}
+    fn release_port(_: &UartPort) {
+        dbg!("release_port\n");
+    }
     fn request_port(_: &UartPort) -> i32 {
+        dbg!("request_port\n");
         0
     }
-    fn config_port(_: &UartPort, _: i32) {}
+    fn config_port(_: &UartPort, _: i32) {
+        dbg!("config_port\n");
+    }
     fn verify_port(_: &UartPort, _: &mut SerialStruct) -> i32 {
+        dbg!("verify_port\n");
         0
     }
     fn ioctl(_: &UartPort, _: u32, _: u64) -> i32 {
+        dbg!("ioctl\n");
         0
     }
     fn poll_init(_: &UartPort) -> i32 {
+        dbg!("poll_init\n");
         0
     }
-    fn poll_put_char(_: &UartPort, _: u8) {}
+    fn poll_put_char(_: &UartPort, _: u8) {
+        dbg!("poll_put_char\n");
+    }
     fn poll_get_char(_: &UartPort) -> i32 {
+        dbg!("poll_get_char\n");
         0
     }
 }

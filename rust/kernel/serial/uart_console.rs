@@ -81,7 +81,9 @@ pub trait ConsoleOps {
     fn console_match(_co: &Console, _name: *mut i8, _idx: i32, _options: *mut i8) -> Result<i32>;
 
     /// The underlying TTY device driver (Optional)
-    fn console_device(_co: &Console, _index: *mut i8) -> *mut bindings::tty_driver;
+    fn console_device(_co: &Console, _index: *mut i8) -> *mut bindings::tty_driver {
+        unimplemented!()
+    }
 }
 
 /// [`UartDriver`]'s console
@@ -100,7 +102,11 @@ impl Console {
         console.write = Some(console_write_callback::<T>);
         console.read = Some(console_read_callback::<T>);
         console.match_ = Some(console_match_callback::<T>);
-        console.device = Some(console_device_callback::<T>);
+        console.device = if T::HAS_CONSOLE_DEVICE {
+            Some(console_device_callback::<T>)
+        } else {
+            Some(bindings::uart_console_device)
+        };
         console.data = reg as *const _ as _;
         Self(console)
     }
