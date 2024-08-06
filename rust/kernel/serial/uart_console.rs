@@ -9,6 +9,7 @@
 use crate::{
     bindings,
     error::{from_result, Result},
+    pr_info,
     types::ForeignOwnable,
 };
 
@@ -108,6 +109,7 @@ impl Console {
             Some(bindings::uart_console_device)
         };
         console.data = reg as *const _ as _;
+        console.setup = Some(console_setup_callback::<T>);
         Self(console)
     }
 
@@ -196,6 +198,18 @@ unsafe extern "C" fn console_device_callback<T: ConsoleOps>(
 ) -> *mut bindings::tty_driver {
     let co = unsafe { Console::from_raw(co) };
     T::console_device(co, index as *mut i8)
+}
+
+unsafe extern "C" fn console_setup_callback<T: ConsoleOps>(
+    co: *mut bindings::console,
+    options: *mut core::ffi::c_char,
+) -> core::ffi::c_int {
+    // from_result(|| {
+    //     let co = unsafe { Console::from_raw(co) };
+    //     T::console_device_setup(co, options)
+    // })
+    pr_info!("console_setup_callback");
+    0
 }
 
 // pub mod uart_driver {
